@@ -8,6 +8,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.widget.AdapterView
+import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
@@ -29,6 +33,11 @@ class MainActivity : AppCompatActivity() {
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var enableQuantizedModel: Boolean = false
+    private var model: String = "resnet18"
+    private var minRuntime = 1000.100
+    private var sumRuntime: Double = 0.0
+    private var numRuntimeSamples = 0
+    lateinit var results : TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +55,22 @@ class MainActivity : AppCompatActivity() {
         enable_quantizedmodel_toggle.setOnCheckedChangeListener { _, isChecked ->
             enableQuantizedModel = isChecked
             setORTAnalyzer()
+        }
+        results = findViewById(R.id.spModels_text) as TextView
+
+        spModels.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(adapterView: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                results.text = adapterView?.getItemAtPosition(position).toString()
+                model = adapterView?.getItemAtPosition(position).toString()
+                minRuntime = 1000.0
+                sumRuntime = 0.0
+                numRuntimeSamples = 0
+                setORTAnalyzer()
+            }
+
+            override fun onNothingSelected(adapterView: AdapterView<*>?) {
+                results.text = "Select Model"
+            }
         }
     }
 
@@ -136,20 +161,49 @@ class MainActivity : AppCompatActivity() {
                 detected_item_3.text = labelData[result.detectedIndices[2]]
                 detected_item_value_3.text = "%.2f%%".format(result.detectedScore[2] * 100)
             }
-
-            inference_time_value.text = result.processTimeMs.toString() + "ms"
+            if (minRuntime > result.processTimeMs/1000000.0){
+                minRuntime = result.processTimeMs/1000000.0
+            }
+            sumRuntime += result.processTimeMs/1000000.0
+            numRuntimeSamples += 1
+            inference_time_av_value.text = "%.2fms".format(sumRuntime/numRuntimeSamples)
+            inference_time_value.text = "%.2fms".format(result.processTimeMs/1000000.0)
+            inference_time_min_value.text = "%.2fms".format(minRuntime)
         }
     }
 
     // Read MobileNet V2 classification labels
     private fun readLabels(): List<String> {
-        return resources.openRawResource(R.raw.imagenet_classes).bufferedReader().readLines()
+        return resources.openRawResource(R.raw.wbc_classes).bufferedReader().readLines()
     }
 
     // Read ort model into a ByteArray, run in background
     private suspend fun readModel(): ByteArray = withContext(Dispatchers.IO) {
-        val modelID =
-            if (enableQuantizedModel) R.raw.mobilenet_v2_uint8 else R.raw.mobilenet_v2_float
+        minRuntime = 1000.0
+        sumRuntime = 0.0
+        numRuntimeSamples = 0
+        var modelID =
+            if (enableQuantizedModel) R.raw.resnet18_int8 else R.raw.resnet18_float
+        if (model == "resnet18"){
+            modelID =
+                if (enableQuantizedModel) R.raw.resnet18_int8 else R.raw.resnet18_float
+        }
+        else if (model == "mobilenet_v2"){
+            modelID =
+                if (enableQuantizedModel) R.raw.mobilenet_v2_int8 else R.raw.mobilenet_v2_float
+        }
+        else if (model == "shufflenet_v2_x1_0"){
+            modelID =
+                if (enableQuantizedModel) R.raw.shufflenet_v2_x1_0_int8 else R.raw.shufflenet_v2_x1_0_float
+        }
+        else if (model == "shufflenet_v2_x0_5"){
+            modelID =
+                if (enableQuantizedModel) R.raw.shufflenet_v2_x0_5_int8 else R.raw.shufflenet_v2_x0_5_float
+        }
+        else {
+            modelID =
+                if (enableQuantizedModel) R.raw.resnet18_int8 else R.raw.resnet18_float
+        }
         resources.openRawResource(modelID).readBytes()
     }
 

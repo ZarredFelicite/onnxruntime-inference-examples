@@ -87,11 +87,11 @@ internal class ORTAnalyzer(
             val env = OrtEnvironment.getEnvironment()
             env.use {
                 val tensor = OnnxTensor.createTensor(env, imgData, shape)
-                val startTime = SystemClock.uptimeMillis()
+                val startTime = SystemClock.elapsedRealtimeNanos()
                 tensor.use {
                     val output = ortSession?.run(Collections.singletonMap(inputName, tensor))
                     output.use {
-                        result.processTimeMs = SystemClock.uptimeMillis() - startTime
+                        result.processTimeMs = SystemClock.elapsedRealtimeNanos() - startTime
                         @Suppress("UNCHECKED_CAST")
                         val rawOutput = ((output?.get(0)?.value) as Array<FloatArray>)[0]
                         val probabilities = softMax(rawOutput)
